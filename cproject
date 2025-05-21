@@ -1,0 +1,277 @@
+#!/bin/bash
+
+print_help() {
+	echo -e "
+Usage:
+	cproject new [PROJECT_NAME] [OPTIONS]	= Create new project in current directory
+	cproject build				= Build project found in current directory
+	cproject run				= Run project in current directory
+	cproject test				= Test project in current directory
+
+Options:
+	cproject new [PROJECT_NAME] -l | --lib	= Setup project as library
+	cproject new [PROJECT_NAME] -g | --git	= Setup project as git repo
+	cproject -h | --help			= Print this message
+"
+}
+
+setup_test() {
+	local project="$1"
+
+cat << EOF > "$project/tests/unit_test.c"
+#include "../src/$project.h"
+#include <stdio.h>
+
+typedef struct test {
+	unsigned int completed;
+	unsigned int passed;
+	unsigned int failed;
+} test_t;
+
+void print_test_result(const test_t *test) {
+	printf("\nCompleted:\t%d\n", test->completed);
+	printf("Passed:\t\t%d\n", test->passed);
+	printf("Failed:\t\t%d\n\n", test->failed);
+}
+
+#define ASSERT(expr)\\
+	if (!(expr)) {\\
+		printf("[FAILED]: %s\n", #expr);\\
+		test.failed++;\\
+	} else {\\
+		printf("[PASSED]: %s\n", #expr);\\
+		test.passed++;\\
+	}\\
+	test.completed++;
+
+int main(void) {
+	test_t test = {0};
+
+	ASSERT(hello_world() == 0);
+
+	print_test_result(&test);
+	return 0;
+}
+
+EOF
+}
+
+setup_header() {
+	local project="$1"
+
+cat << EOF > "$project/src/$project.h"
+#ifndef ${project^^}_H
+#define ${project^^}_H
+
+int hello_world();
+
+#endif
+EOF
+}
+
+setup_src() {
+	local project="$1"
+
+cat << EOF > "$project/src/$project.c"
+#include "$project.h"
+#include <stdio.h>
+
+int hello_world() {
+	printf("Hello, World!\n");
+	return 0;
+}
+EOF
+
+}
+
+setup_main() {
+	local project="$1"
+
+cat << EOF > "$project/src/main.c"
+#include "$project.h"
+
+int main(void) {
+	if (hello_world()) return 1;
+	return 0;
+}
+EOF
+}
+
+setup_project() {
+	local project="$1"
+
+	mkdir -p $project/src
+	mkdir -p $project/tests
+
+cat << EOF > "$project/.cproject"
+project=$project
+EOF
+}
+
+setup_git() {
+	project="$1"
+
+	if ! command -v git &> /dev/null; then
+		echo "[ERROR]: Couldn't find git in PATH"
+		exit 1
+	fi
+
+	git init "$project" &> /dev/null
+
+cat << EOF > "$project/.gitignore"
+tests/build
+build
+EOF
+
+cat << EOF > "$project/README.md"
+# $project
+An awesome program written in C.
+EOF
+}
+
+build_project() {
+	if ! command -v cmake &> /dev/null; then
+		echo "Couldn't find cmake in PATH"
+		exit1
+	fi
+	if [ ! -e .cproject ]; then
+		echo "[ERROR]: Current directory is not a cproject root."
+		print_help
+		exit 1
+	fi
+	if [ ! -e src/main.c ]; then
+		echo "[ERROR]: Project appears to be a library. Please run cproject test instead."
+		exit 1
+	fi
+	source .cproject
+	if [ ! -e "CMakeLists.txt" ]; then
+		local cmake_version=$(cmake --version | grep version | cut -d' ' -f 3)
+
+cat << EOF > CMakeLists.txt
+cmake_minimum_required(VERSION $cmake_version)
+project(${project^^})
+add_compile_options(-Wall -Wextra -Werror -Wconversion -Wunused-result)
+add_executable(${project^^} src/main.c src/$project.c)
+EOF
+
+	fi
+
+	if [ ! -e "build" ]; then
+		mkdir "build"
+	fi
+	cd build
+	cmake .. -DCMAKE_EXPORT_COMPILE_COMMANDS=on
+	make
+	cd - &> /dev/null
+
+}
+
+run_project() {
+	if [ ! -e .cproject ]; then
+		echo "[ERROR]: Current directory is not a cproject root."
+		print_help
+		exit 1
+	fi
+	build_project
+	source .cproject
+	build/${project^^}
+	echo "Program exited with status code:" $?
+}
+
+test_project() {
+	if ! command -v cmake &> /dev/null; then
+		echo "Couldn't find cmake in PATH"
+		exit1
+	fi
+	if [ ! -e .cproject ]; then
+		echo "[ERROR]: Current directory is not a cproject root."
+		print_help
+		exit 1
+	fi
+	source .cproject
+
+	if [ ! -e "tests/CMakeLists.txt" ]; then
+		local cmake_version=$(cmake --version | grep version | cut -d' ' -f 3)
+
+cat << EOF > tests/CMakeLists.txt
+cmake_minimum_required(VERSION $cmake_version)
+project(${project^^})
+add_compile_options(-Wall -Wextra -Werror -Wconversion -Wunused-result)
+add_executable(${project^^} unit_test.c ../src/$project.c)
+EOF
+
+	fi
+
+	if [ ! -e "tests/build" ]; then
+		mkdir "tests/build"
+	fi
+	cd "tests/build"
+	cmake .. -DCMAKE_EXPORT_COMPILE_COMMANDS=on
+	make
+	cd - &> /dev/null
+
+	tests/build/${project^^}
+	echo "Test exited with status code:" $?
+
+}
+
+main () {
+	local argument="$1"
+	local project="$2"
+	local options[0]="$3"
+	local options[1]="$4"
+
+	if [[ "$2" == -* ]]; then
+		print_help
+		exit 1
+	fi
+
+	case "$argument" in
+		new)
+			if [ -z "$project" ]; then
+				print_help
+				exit 1
+			fi
+			echo "Creating project named $project..."
+			setup_project "$project"
+			setup_header "$project"
+			setup_src "$project"
+			setup_main "$project"
+			setup_test "$project"
+			for option in ${options[@]}; do
+				if [[ "$option" == "-l" || "$option" == "--lib" ]]; then
+					echo "Setting up project as lib..."
+					rm "$project/src/main.c"
+				fi
+				if [[ "$option" == "-g" || "$option" == "--git" ]]; then
+					echo "Setting up project as git repo..."
+					setup_git "$project"
+				fi
+			done
+			echo "Project $project created."
+			if command -v tree &> /dev/null; then
+				echo "Project structure:"
+				tree $project
+			fi
+			;;
+		build)
+			echo "Building project..."
+			build_project
+			;;
+		run)
+			echo "Running project..."
+			run_project
+			;;
+		test)
+			echo "Testing project..."
+			test_project
+			;;
+		*)
+			print_help
+			exit 1
+			;;
+
+	esac
+}
+
+main "$@"
