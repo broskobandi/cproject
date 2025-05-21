@@ -18,7 +18,7 @@ Options:
 setup_test() {
 	local project="$1"
 
-cat << EOF > "$project/tests/unit_test.c"
+	cat << EOF > "$project/tests/unit_test.c"
 #include "../src/$project.h"
 #include <stdio.h>
 
@@ -58,10 +58,11 @@ EOF
 
 setup_header() {
 	local project="$1"
+	local header_guard=$(echo "${project^^}" | sed 's/-/_/g')
 
-cat << EOF > "$project/src/$project.h"
-#ifndef ${project^^}_H
-#define ${project^^}_H
+	cat << EOF > "$project/src/$project.h"
+#ifndef ${header_guard}_H
+#define ${header_guard}_H
 
 int hello_world();
 
@@ -72,7 +73,7 @@ EOF
 setup_src() {
 	local project="$1"
 
-cat << EOF > "$project/src/$project.c"
+	cat << EOF > "$project/src/$project.c"
 #include "$project.h"
 #include <stdio.h>
 
@@ -87,7 +88,7 @@ EOF
 setup_main() {
 	local project="$1"
 
-cat << EOF > "$project/src/main.c"
+	cat << EOF > "$project/src/main.c"
 #include "$project.h"
 
 int main(void) {
@@ -100,10 +101,15 @@ EOF
 setup_project() {
 	local project="$1"
 
+	if [ -e $project ]; then
+		echo -e "\n[ERROR]: File named $project already exists"
+		exit 1
+	fi
+
 	mkdir -p $project/src
 	mkdir -p $project/tests
 
-cat << EOF > "$project/.cproject"
+	cat << EOF > "$project/.cproject"
 project=$project
 EOF
 }
@@ -112,18 +118,18 @@ setup_git() {
 	project="$1"
 
 	if ! command -v git &> /dev/null; then
-		echo "[ERROR]: Couldn't find git in PATH"
+		echo -e "\n[ERROR]: Couldn't find git in PATH"
 		exit 1
 	fi
 
 	git init "$project" &> /dev/null
 
-cat << EOF > "$project/.gitignore"
+	cat << EOF > "$project/.gitignore"
 tests/build
 build
 EOF
 
-cat << EOF > "$project/README.md"
+	cat << EOF > "$project/README.md"
 # $project
 An awesome program written in C.
 EOF
@@ -135,19 +141,18 @@ build_project() {
 		exit1
 	fi
 	if [ ! -e .cproject ]; then
-		echo "[ERROR]: Current directory is not a cproject root."
-		print_help
+		echo -e "\n[ERROR]: Current directory is not a cproject root."
 		exit 1
 	fi
 	if [ ! -e src/main.c ]; then
-		echo "[ERROR]: Project appears to be a library. Please run cproject test instead."
+		echo -e "\n[ERROR]: Project appears to be a library. Please run cproject test instead."
 		exit 1
 	fi
 	source .cproject
 	if [ ! -e "CMakeLists.txt" ]; then
 		local cmake_version=$(cmake --version | grep version | cut -d' ' -f 3)
 
-cat << EOF > CMakeLists.txt
+	cat << EOF > CMakeLists.txt
 cmake_minimum_required(VERSION $cmake_version)
 project(${project^^})
 add_compile_options(-Wall -Wextra -Werror -Wconversion -Wunused-result)
@@ -169,7 +174,6 @@ EOF
 run_project() {
 	if [ ! -e .cproject ]; then
 		echo "[ERROR]: Current directory is not a cproject root."
-		print_help
 		exit 1
 	fi
 	build_project
@@ -185,7 +189,6 @@ test_project() {
 	fi
 	if [ ! -e .cproject ]; then
 		echo "[ERROR]: Current directory is not a cproject root."
-		print_help
 		exit 1
 	fi
 	source .cproject
@@ -193,7 +196,7 @@ test_project() {
 	if [ ! -e "tests/CMakeLists.txt" ]; then
 		local cmake_version=$(cmake --version | grep version | cut -d' ' -f 3)
 
-cat << EOF > tests/CMakeLists.txt
+	cat << EOF > tests/CMakeLists.txt
 cmake_minimum_required(VERSION $cmake_version)
 project(${project^^})
 add_compile_options(-Wall -Wextra -Werror -Wconversion -Wunused-result)
