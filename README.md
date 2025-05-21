@@ -7,7 +7,7 @@ sudo ln -s /full/path/to/cproject /usr/bin/
 ```
 
 ## Usage
-
+```bash
 Usage:
 	cproject new [PROJECT_NAME] [OPTIONS]	= Create new project in current directory
 	cproject build				= Build project found in current directory
@@ -18,3 +18,4 @@ Options:
 	cproject new [PROJECT_NAME] -l | --lib	= Setup project as library
 	cproject new [PROJECT_NAME] -g | --git	= Setup project as git repo
 	cproject -h | --help			= Print this message
+```
