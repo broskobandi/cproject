@@ -149,14 +149,15 @@ build_project() {
 		exit 1
 	fi
 	source .cproject
+	local project_name=$(echo "${project^^}" | sed 's/-/_/g')
 	if [ ! -e "CMakeLists.txt" ]; then
 		local cmake_version=$(cmake --version | grep version | cut -d' ' -f 3)
 
 	cat << EOF > CMakeLists.txt
 cmake_minimum_required(VERSION $cmake_version)
-project(${project^^})
+project($project_name)
 add_compile_options(-Wall -Wextra -Werror -Wconversion -Wunused-result)
-add_executable(${project^^} src/main.c src/$project.c)
+add_executable($project_name src/main.c src/$project.c)
 EOF
 
 	fi
@@ -178,7 +179,8 @@ run_project() {
 	fi
 	build_project
 	source .cproject
-	build/${project^^}
+	local project_name=$(echo "${project^^}" | sed 's/-/_/g')
+	build/$project_name
 	echo "Program exited with status code:" $?
 }
 
@@ -192,15 +194,16 @@ test_project() {
 		exit 1
 	fi
 	source .cproject
+	local project_name=$(echo "${project^^}" | sed 's/-/_/g')
 
 	if [ ! -e "tests/CMakeLists.txt" ]; then
 		local cmake_version=$(cmake --version | grep version | cut -d' ' -f 3)
 
 	cat << EOF > tests/CMakeLists.txt
 cmake_minimum_required(VERSION $cmake_version)
-project(${project^^})
+project($project_name)
 add_compile_options(-Wall -Wextra -Werror -Wconversion -Wunused-result)
-add_executable(${project^^} unit_test.c ../src/$project.c)
+add_executable($project_name unit_test.c ../src/$project.c)
 EOF
 
 	fi
@@ -213,7 +216,7 @@ EOF
 	make
 	cd - &> /dev/null
 
-	tests/build/${project^^}
+	tests/build/$project_name
 	echo "Test exited with status code:" $?
 
 }
